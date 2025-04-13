@@ -13,6 +13,29 @@ model.load_model("facial_expression_model2.json")
 scaler = joblib.load("scaler2.pkl")
 label_encoder = joblib.load("label_encoder2.pkl")
 
+# List of features used by the model
+MODEL_FEATURES = [
+    "vertical_mouth_openness",
+    "inner_outer_lip_dist",
+    "mouth_nose_dist",
+    "mouth_aspect_ratio",
+    "left_eye_openness",
+    "eye_height",
+    "forehead_height",
+    "eye_aspect_ratio",
+    "eyebrow_arch",
+    "eye_width",
+    "mouth_area",
+    "top_lip_curvature",
+    "right_eye_openness",
+    "left_brow_slope",
+    "mouth_corner_angle",
+]
+
+print(f"Model will use the following {len(MODEL_FEATURES)} features:")
+for i, feature in enumerate(MODEL_FEATURES, 1):
+    print(f"{i}. {feature}")
+
 # Initialize MediaPipe Face Mesh
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(
@@ -262,45 +285,20 @@ def predict_emotion(features, scaler, model, label_encoder):
         # Convert features to a DataFrame to ensure consistent order
         feature_df = pd.DataFrame([features])
 
-        # Make sure feature order matches what the model expects
-        expected_features = [
-            "eyebrow_eye_dist",
-            "mouth_nose_dist",
-            "inner_outer_lip_dist",
-            "eye_width",
-            "eye_height",
-            "eyebrow_arch",
-            "mouth_corner_angle",
-            "nose_bridge_angle",
-            "eye_aspect_ratio",
-            "mouth_aspect_ratio",
-            "mouth_area",
-            "eye_area",
-            # Add new features here if your model has been trained with them
-            # If using with a model that wasn't trained with these features,
-            # comment these out or retrain your model
-            "eye_height_symmetry",
-            "mouth_corner_symmetry",
-            "face_width_height_ratio",
-            "lower_upper_face_ratio",
-            "top_lip_curvature",
-            "nose_wrinkle",
-            "brow_inner_distance",
-            "left_brow_slope",
-            "right_brow_slope",
-            "cheek_distance",
-            "vertical_mouth_openness",
-            "left_eye_openness",
-            "right_eye_openness",
-            "eye_openness_ratio",
-            "forehead_height",
-        ]
+        # Check for missing features
+        missing_features = [f for f in MODEL_FEATURES if f not in feature_df.columns]
+        if missing_features:
+            print(
+                f"Warning: Missing {len(missing_features)} features: {missing_features}"
+            )
 
-        # Filter to only include features that exist in the input
-        available_features = [f for f in expected_features if f in feature_df.columns]
+        # Get available features from those required by the model
+        available_features = [f for f in MODEL_FEATURES if f in feature_df.columns]
 
-        # If using with existing model trained on original features only:
-        # available_features = expected_features[:12]  # Use only the first 12 original features
+        if len(available_features) < len(MODEL_FEATURES):
+            print(
+                f"Using {len(available_features)}/{len(MODEL_FEATURES)} features for prediction"
+            )
 
         # Reorder columns to match training data
         feature_df = feature_df[available_features]
@@ -339,6 +337,8 @@ emotion_colors = {
     "Surprise": (0, 255, 0),  # Green
 }
 
+# Flag to check features on first detection
+first_face_detected = False
 
 prediction_history = []
 history_size = 5
@@ -373,6 +373,19 @@ while True:
 
         # Extract facial features
         features = extract_features(face_landmarks.landmark, w, h)
+
+        # Print features on first detection
+        if not first_face_detected and features:
+            first_face_detected = True
+            print("\nExtracted facial features:")
+            for i, (key, value) in enumerate(sorted(features.items()), 1):
+                in_model = "✓" if key in MODEL_FEATURES else "✗"
+                print(f"{i:2d}. {key:25s}: {value:.4f} {in_model}")
+
+            print(f"\nFeatures used by model ({len(MODEL_FEATURES)}):")
+            for i, feature in enumerate(MODEL_FEATURES, 1):
+                exists = "✓" if feature in features else "✗"
+                print(f"{i:2d}. {feature:25s} {exists}")
 
         if features:
             # Predict emotion from features
